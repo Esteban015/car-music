@@ -5847,7 +5847,7 @@ async function playTrackResilient(
 
 
       await sleep(
-        1200
+        1800
       );
 
     }
@@ -5880,16 +5880,57 @@ async function playTrackResilient(
     ) {
 
       console.log(
-        "✅ Spotify respondió correctamente."
+        "✅ Spotify aceptó PLAY. Verificando reproducción..."
       );
 
 
-      return {
+      await sleep(
+        800
+      );
 
-        deviceName:
-          device.name
 
-      };
+      const playback =
+        await getPlaybackStateSafe(
+          accessToken
+        );
+
+
+      if (
+        playback?.item?.uri ===
+          trackUri
+        &&
+        playback?.is_playing ===
+          true
+      ) {
+
+        console.log(
+          "✅ Playback realmente confirmado."
+        );
+
+
+        return {
+
+          deviceName:
+            playback.device
+              ?.name ||
+            device.name
+
+        };
+
+      }
+
+
+      console.log(
+        "⚠️ Spotify aceptó PLAY pero el tema todavía no está reproduciéndose. Reintentando..."
+      );
+
+
+      await sleep(
+        700
+      );
+
+
+      continue;
 
     }
 
@@ -5924,7 +5965,10 @@ async function playTrackResilient(
 
     if (
       playing?.item?.uri ===
-      trackUri
+        trackUri
+      &&
+      playing?.is_playing ===
+        true
     ) {
 
       console.log(
@@ -6004,7 +6048,11 @@ async function playTrackResilient(
     finalState
       ?.item
       ?.uri ===
-    trackUri
+      trackUri
+    &&
+    finalState
+      ?.is_playing ===
+      true
   ) {
 
     console.log(
@@ -6149,7 +6197,7 @@ async function transferPlaybackSafe(
               ],
 
               play:
-                false
+                true
 
             }
           )
