@@ -5106,7 +5106,7 @@ async function searchTrack(
 
   for (
     let attempt = 1;
-    attempt <= 3;
+    attempt <= 2;
     attempt++
   ) {
 
@@ -5883,17 +5883,84 @@ async function playTrackResilient(
     |--------------------------------------------------------------------------
     | PLAY
     |--------------------------------------------------------------------------
+    |
+    | Spotify 2026: priorizamos context_uri + offset porque el método
+    | uris:[track] puede responder 204 y dejar el cliente pausado.
+    |--------------------------------------------------------------------------
     */
 
-    const result =
+    let result =
+      null;
+
+
+    if (
+      contextUri
+    ) {
+
+      console.log(
+        "▶ PLAY rápido usando context_uri + offset..."
+      );
+
+
+      result =
+        await playTrackFromContextOnce(
+          accessToken,
+          device.id,
+          contextUri,
+          trackUri
+        );
+
+
+      lastStatus =
+        result.status;
+
+
+      if (
+        result.ok
+      ) {
+
+        const playback =
+          await waitForTrackPlaying(
+            accessToken,
+            trackUri
+          );
+
+
+        if (
+          playback
+        ) {
+
+          console.log(
+            "✅ Playback confirmado por contexto."
+          );
+
+
+          return {
+
+            deviceName:
+              playback.device
+                ?.name ||
+              device.name
+
+          };
+
+        }
+
+      }
+
+
+      console.log(
+        "⚠️ Context playback no confirmó; probando método por URI..."
+      );
+
+    }
+
+
+    result =
       await playTrackOnce(
-
         accessToken,
-
         device.id,
-
         trackUri
-
       );
 
 
@@ -5904,11 +5971,6 @@ async function playTrackResilient(
     if (
       result.ok
     ) {
-
-      console.log(
-        "✅ Spotify aceptó PLAY por URI. Verificando reproducción..."
-      );
-
 
       const playback =
         await waitForTrackPlaying(
@@ -5922,7 +5984,7 @@ async function playTrackResilient(
       ) {
 
         console.log(
-          "✅ Playback realmente confirmado."
+          "✅ Playback confirmado por URI."
         );
 
 
@@ -5937,149 +5999,15 @@ async function playTrackResilient(
 
       }
 
-
-      /*
-      |--------------------------------------------------------------------------
-      | FALLBACK SPOTIFY 2026
-      |--------------------------------------------------------------------------
-      |
-      | Spotify está devolviendo 204 para uris[] pero en algunos clientes
-      | pausa el playback sin iniciar el track. Si tenemos el álbum,
-      | arrancamos el contexto del álbum desplazado al track exacto.
-      |--------------------------------------------------------------------------
-      */
-
-      if (
-        contextUri
-      ) {
-
-        console.log(
-          "⚠️ PLAY por URI no inició el tema. Probando fallback context_uri + offset..."
-        );
-
-
-        const fallback =
-          await playTrackFromContextOnce(
-            accessToken,
-            device.id,
-            contextUri,
-            trackUri
-          );
-
-
-        lastStatus =
-          fallback.status;
-
-
-        if (
-          fallback.ok
-        ) {
-
-          const fallbackPlayback =
-            await waitForTrackPlaying(
-              accessToken,
-              trackUri
-            );
-
-
-          if (
-            fallbackPlayback
-          ) {
-
-            console.log(
-              "✅ Playback confirmado usando fallback de contexto."
-            );
-
-
-            return {
-
-              deviceName:
-                fallbackPlayback.device
-                  ?.name ||
-                device.name
-
-            };
-
-          }
-
-        }
-
-
-        console.log(
-          "⚠️ El fallback de contexto tampoco quedó reproduciendo."
-        );
-
-      }
-
-
-      await sleep(
-        700
-      );
-
-
-      continue;
-
     }
 
 
     console.log(
-
-      "⚠️ Spotify respondió:",
-
+      "⚠️ Spotify no confirmó playback:",
       result.status,
-
       result.body
-
     );
 
-
-    /*
-    |--------------------------------------------------------------------------
-    | Verificar si igualmente reprodujo.
-    |--------------------------------------------------------------------------
-    */
-
-    await sleep(
-      700
-    );
-
-
-    const playing =
-      await getPlaybackStateSafe(
-        accessToken
-      );
-
-
-    if (
-      playing?.item?.uri ===
-        trackUri
-      &&
-      playing?.is_playing ===
-        true
-    ) {
-
-      console.log(
-        "✅ Spotify devolvió error HTTP, pero el tema solicitado sí está reproduciéndose."
-      );
-
-
-      return {
-
-        deviceName:
-          playing.device
-            ?.name ||
-          device.name
-
-      };
-
-    }
-
-
-    /*
-    |--------------------------------------------------------------------------
-    | Errores recuperables
-    |--------------------------------------------------------------------------
-    */
 
     if (
       [
@@ -6089,16 +6017,28 @@ async function playTrackResilient(
       ].includes(
         result.status
       )
+      &&
+      attempt <
+        2
     ) {
 
-      console.log(
-        "🔁 Error recuperable. Reintentando..."
+      await sleep(
+        450
       );
 
 
+      continue;
+
+    }
+
+
+    if (
+      attempt <
+      2
+    ) {
+
       await sleep(
-        attempt *
-        900
+        350
       );
 
 
@@ -6121,7 +6061,7 @@ async function playTrackResilient(
   */
 
   await sleep(
-    700
+    250
   );
 
 
@@ -6430,7 +6370,7 @@ async function waitForDeviceActive(
 
   for (
     let attempt = 1;
-    attempt <= 6;
+    attempt <= 4;
     attempt++
   ) {
 
@@ -6466,7 +6406,7 @@ async function waitForDeviceActive(
 
 
     await sleep(
-      400
+      250
     );
 
   }
@@ -6490,7 +6430,7 @@ async function waitForTrackPlaying(
 
   for (
     let attempt = 1;
-    attempt <= 6;
+    attempt <= 4;
     attempt++
   ) {
 
@@ -6531,7 +6471,7 @@ async function waitForTrackPlaying(
 
 
     await sleep(
-      500
+      250
     );
 
   }
