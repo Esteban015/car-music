@@ -4150,7 +4150,8 @@ if (
   const playbackResult =
     await playTrackResilient(
       accessToken,
-      spotifyTrack.uri
+      spotifyTrack.uri,
+      spotifyTrack.album?.uri || null
     );
 
 
@@ -5747,7 +5748,8 @@ function selectDevice(
 
 async function playTrackResilient(
   accessToken,
-  trackUri
+  trackUri,
+  contextUri
 ) {
 
   let lastStatus =
@@ -5904,7 +5906,7 @@ async function playTrackResilient(
     ) {
 
       console.log(
-        "✅ Spotify aceptó PLAY. Verificando reproducción..."
+        "✅ Spotify aceptó PLAY por URI. Verificando reproducción..."
       );
 
 
@@ -5936,9 +5938,78 @@ async function playTrackResilient(
       }
 
 
-      console.log(
-        "⚠️ Spotify aceptó PLAY pero el tema todavía no está reproduciéndose. Reintentando..."
-      );
+      /*
+      |--------------------------------------------------------------------------
+      | FALLBACK SPOTIFY 2026
+      |--------------------------------------------------------------------------
+      |
+      | Spotify está devolviendo 204 para uris[] pero en algunos clientes
+      | pausa el playback sin iniciar el track. Si tenemos el álbum,
+      | arrancamos el contexto del álbum desplazado al track exacto.
+      |--------------------------------------------------------------------------
+      */
+
+      if (
+        contextUri
+      ) {
+
+        console.log(
+          "⚠️ PLAY por URI no inició el tema. Probando fallback context_uri + offset..."
+        );
+
+
+        const fallback =
+          await playTrackFromContextOnce(
+            accessToken,
+            device.id,
+            contextUri,
+            trackUri
+          );
+
+
+        lastStatus =
+          fallback.status;
+
+
+        if (
+          fallback.ok
+        ) {
+
+          const fallbackPlayback =
+            await waitForTrackPlaying(
+              accessToken,
+              trackUri
+            );
+
+
+          if (
+            fallbackPlayback
+          ) {
+
+            console.log(
+              "✅ Playback confirmado usando fallback de contexto."
+            );
+
+
+            return {
+
+              deviceName:
+                fallbackPlayback.device
+                  ?.name ||
+                device.name
+
+            };
+
+          }
+
+        }
+
+
+        console.log(
+          "⚠️ El fallback de contexto tampoco quedó reproduciendo."
+        );
+
+      }
 
 
       await sleep(
@@ -6157,6 +6228,96 @@ async function playTrackOnce(
 
   const body =
     await response.text();
+
+
+  return {
+
+    ok:
+      response.ok,
+
+    status:
+      response.status,
+
+    body
+
+  };
+
+}
+
+
+/*
+|--------------------------------------------------------------------------
+| PLAY DESDE CONTEXTO (FALLBACK)
+|--------------------------------------------------------------------------
+*/
+
+async function playTrackFromContextOnce(
+  accessToken,
+  deviceId,
+  contextUri,
+  trackUri
+) {
+
+  const url =
+    "https://api.spotify.com/v1/me/player/play" +
+    "?device_id=" +
+    encodeURIComponent(
+      deviceId
+    );
+
+
+  const response =
+    await fetch(
+      url,
+      {
+
+        method:
+          "PUT",
+
+        headers: {
+
+          Authorization:
+            "Bearer " +
+            accessToken,
+
+          "Content-Type":
+            "application/json"
+
+        },
+
+        body:
+          JSON.stringify(
+            {
+
+              context_uri:
+                contextUri,
+
+              offset: {
+
+                uri:
+                  trackUri
+
+              },
+
+              position_ms:
+                0
+
+            }
+          )
+
+      }
+    );
+
+
+  const body =
+    await response.text();
+
+
+  console.log(
+    "🎚️ Fallback context response:",
+    response.status,
+    body
+  );
 
 
   return {
