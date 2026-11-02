@@ -7,6 +7,12 @@ const ADMIN_SESSION_HOURS = 8;
 const MAX_QUERY_LENGTH = 100;
 const MAX_BODY_BYTES = 2048;
 
+let cachedSpotifyAccessToken =
+  null;
+
+let cachedSpotifyAccessTokenExpiresAt =
+  0;
+
 /*
 |--------------------------------------------------------------------------
 | DURABLE OBJECT - MUSIC GUARD
@@ -4972,6 +4978,19 @@ async function getAccessToken(
 ) {
 
   if (
+    cachedSpotifyAccessToken
+    &&
+    cachedSpotifyAccessTokenExpiresAt >
+      Date.now() +
+      60 * 1000
+  ) {
+
+    return cachedSpotifyAccessToken;
+
+  }
+
+
+  if (
     !env.SPOTIFY_CLIENT_ID
     ||
     !env.SPOTIFY_CLIENT_SECRET
@@ -5056,7 +5075,19 @@ async function getAccessToken(
     await response.json();
 
 
-  return data.access_token;
+  cachedSpotifyAccessToken =
+    data.access_token;
+
+
+  cachedSpotifyAccessTokenExpiresAt =
+    Date.now() +
+    Number(
+      data.expires_in || 3600
+    ) *
+    1000;
+
+
+  return cachedSpotifyAccessToken;
 
 }
 
@@ -5758,7 +5789,7 @@ async function playTrackResilient(
 
   for (
     let attempt = 1;
-    attempt <= 3;
+    attempt <= 2;
     attempt++
   ) {
 
@@ -5919,38 +5950,23 @@ async function playTrackResilient(
         result.ok
       ) {
 
-        const playback =
-          await waitForTrackPlaying(
-            accessToken,
-            trackUri
-          );
+        console.log(
+          "✅ Spotify aceptó playback por contexto. Respondiendo sin esperar polling."
+        );
 
 
-        if (
-          playback
-        ) {
+        return {
 
-          console.log(
-            "✅ Playback confirmado por contexto."
-          );
+          deviceName:
+            device.name
 
-
-          return {
-
-            deviceName:
-              playback.device
-                ?.name ||
-              device.name
-
-          };
-
-        }
+        };
 
       }
 
 
       console.log(
-        "⚠️ Context playback no confirmó; probando método por URI..."
+        "⚠️ Context playback falló; probando método por URI..."
       );
 
     }
@@ -6425,12 +6441,14 @@ async function waitForDeviceActive(
 
 async function waitForTrackPlaying(
   accessToken,
-  trackUri
+  trackUri,
+  maxAttempts = 2,
+  delayMs = 150
 ) {
 
   for (
     let attempt = 1;
-    attempt <= 4;
+    attempt <= maxAttempts;
     attempt++
   ) {
 
@@ -6471,7 +6489,7 @@ async function waitForTrackPlaying(
 
 
     await sleep(
-      250
+      delayMs
     );
 
   }
