@@ -5655,7 +5655,40 @@ function selectDevice(
   return (
 
     /*
-    | Preferimos Motorola
+    | Primero respetamos el device que Spotify
+    | ya considera activo. Así evitamos transferencias
+    | innecesarias que pueden interferir con PLAY.
+    */
+
+    devices.find(
+      device =>
+        device.type
+          ?.toLowerCase() ===
+          "smartphone"
+        &&
+        device.is_active
+        &&
+        !device.is_restricted
+        &&
+        device.id
+    )
+
+    ||
+
+    devices.find(
+      device =>
+        device.is_active
+        &&
+        !device.is_restricted
+        &&
+        device.id
+    )
+
+    ||
+
+    /*
+    | Si no hay ninguno activo, preferimos
+    | el teléfono Motorola del conductor.
     */
 
     devices.find(
@@ -5674,7 +5707,7 @@ function selectDevice(
     ||
 
     /*
-    | Smartphone activo
+    | Cualquier smartphone disponible
     */
 
     devices.find(
@@ -5682,40 +5715,6 @@ function selectDevice(
         device.type
           ?.toLowerCase() ===
           "smartphone"
-        &&
-        device.is_active
-        &&
-        !device.is_restricted
-        &&
-        device.id
-    )
-
-    ||
-
-    /*
-    | Smartphone disponible
-    */
-
-    devices.find(
-      device =>
-        device.type
-          ?.toLowerCase() ===
-          "smartphone"
-        &&
-        !device.is_restricted
-        &&
-        device.id
-    )
-
-    ||
-
-    /*
-    | Cualquier device activo
-    */
-
-    devices.find(
-      device =>
-        device.is_active
         &&
         !device.is_restricted
         &&
@@ -5840,15 +5839,40 @@ async function playTrackResilient(
       );
 
 
-      await transferPlaybackSafe(
-        accessToken,
-        device.id
-      );
+      const transferred =
+        await transferPlaybackSafe(
+          accessToken,
+          device.id
+        );
 
 
-      await sleep(
-        1800
-      );
+      if (
+        !transferred
+      ) {
+
+        console.log(
+          "⚠️ No se pudo transferir el playback al teléfono."
+        );
+
+      }
+
+
+      const active =
+        await waitForDeviceActive(
+          accessToken,
+          device.id
+        );
+
+
+      if (
+        !active
+      ) {
+
+        console.log(
+          "⚠️ Spotify todavía no marca el teléfono como activo; intentaremos PLAY igualmente."
+        );
+
+      }
 
     }
 
@@ -5884,23 +5908,15 @@ async function playTrackResilient(
       );
 
 
-      await sleep(
-        800
-      );
-
-
       const playback =
-        await getPlaybackStateSafe(
-          accessToken
+        await waitForTrackPlaying(
+          accessToken,
+          trackUri
         );
 
 
       if (
-        playback?.item?.uri ===
-          trackUri
-        &&
-        playback?.is_playing ===
-          true
+        playback
       ) {
 
         console.log(
@@ -6197,7 +6213,7 @@ async function transferPlaybackSafe(
               ],
 
               play:
-                true
+                false
 
             }
           )
@@ -6236,6 +6252,131 @@ async function transferPlaybackSafe(
 
 
   return true;
+
+}
+
+
+/*
+|--------------------------------------------------------------------------
+| ESPERAR DEVICE ACTIVO
+|--------------------------------------------------------------------------
+*/
+
+async function waitForDeviceActive(
+  accessToken,
+  deviceId
+) {
+
+  for (
+    let attempt = 1;
+    attempt <= 6;
+    attempt++
+  ) {
+
+    const devices =
+      await getDevices(
+        accessToken
+      );
+
+
+    const active =
+      devices.find(
+        device =>
+          device.id ===
+            deviceId
+          &&
+          device.is_active
+      );
+
+
+    if (
+      active
+    ) {
+
+      console.log(
+        "✅ Device activo confirmado:",
+        active.name
+      );
+
+
+      return active;
+
+    }
+
+
+    await sleep(
+      400
+    );
+
+  }
+
+
+  return null;
+
+}
+
+
+/*
+|--------------------------------------------------------------------------
+| ESPERAR TRACK REPRODUCIÉNDOSE
+|--------------------------------------------------------------------------
+*/
+
+async function waitForTrackPlaying(
+  accessToken,
+  trackUri
+) {
+
+  for (
+    let attempt = 1;
+    attempt <= 6;
+    attempt++
+  ) {
+
+    const playback =
+      await getPlaybackStateSafe(
+        accessToken
+      );
+
+
+    console.log(
+      `🔎 Verificación playback ${attempt}:`,
+      playback
+        ? JSON.stringify({
+            uri:
+              playback.item?.uri ||
+              null,
+            isPlaying:
+              playback.is_playing,
+            device:
+              playback.device?.name ||
+              null
+          })
+        : "sin estado"
+    );
+
+
+    if (
+      playback?.item?.uri ===
+        trackUri
+      &&
+      playback?.is_playing ===
+        true
+    ) {
+
+      return playback;
+
+    }
+
+
+    await sleep(
+      500
+    );
+
+  }
+
+
+  return null;
 
 }
 
